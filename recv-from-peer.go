@@ -31,8 +31,20 @@ func interruptibleContext() (context.Context, context.CancelFunc) {
 
 func recvFromPeer(ctx context.Context) error {
 	var (
-		peer           = flag.String("peer", "10.0.0.76", "TODO")
-		v4l2sinkdevice = flag.String("v4l2sink_device", "/dev/video11", "device to send to peer")
+		peer = flag.String(
+			"peer",
+			"10.0.0.76",
+			"TODO")
+
+		listenAddr = flag.String(
+			"listen",
+			"midna.zekjur.net",
+			"TODO")
+
+		v4l2sinkdevice = flag.String(
+			"v4l2sink_device",
+			"/dev/video11",
+			"device to send to peer")
 	)
 	flag.Parse()
 
@@ -57,20 +69,40 @@ func recvFromPeer(ctx context.Context) error {
 		"rtpbin", "name=rtpbin", "latency=0", // default 200ms jitter buffer
 
 		// UDP network setup
-		"udpsrc", "caps=application/x-rtp,media=(string)video,clock-rate=(int)90000,encoding-name=(string)H264",
-		"port=5000", "!", "rtpbin.recv_rtp_sink_0",
+		"udpsrc",
+		"address="+*listenAddr,
+		"caps=application/x-rtp,media=(string)video,clock-rate=(int)90000,encoding-name=(string)H264",
+		"port=5000",
+		"!", "rtpbin.recv_rtp_sink_0",
 
 		// Video setup
-		"rtpbin.", "!", "rtph264depay", "!", "decodebin", "!", "videoconvert", "!", "v4l2sink", "device="+*v4l2sinkdevice,
+		"rtpbin.",
+		"!", "rtph264depay",
+		"!", "decodebin",
+		"!", "videoconvert",
+		"!", "v4l2sink", "device="+*v4l2sinkdevice,
 
 		// More UDP network setup
-		"udpsrc", "port=5001", "!", "rtpbin.recv_rtcp_sink_0",
-		"rtpbin.send_rtcp_src_0", "!", "udpsink", "host="+*peer, "port=5005", "sync=false", "async=false",
-		"udpsrc", "caps=application/x-rtp,media=(string)audio,clock-rate=(int)48000,encoding-name=(string)OPUS,encoding-params=(string)1,octet-align=(string)1",
-		"port=5002", "!", "rtpbin.recv_rtp_sink_1",
+		"udpsrc", "port=5001",
+		"!", "rtpbin.recv_rtcp_sink_0",
+		"rtpbin.send_rtcp_src_0",
+		"!", "udpsink", "host="+*peer, "port=5005", "sync=false", "async=false",
+		"udpsrc",
+		"caps=application/x-rtp,media=(string)audio,clock-rate=(int)48000,encoding-name=(string)OPUS,encoding-params=(string)1,octet-align=(string)1",
+		"address="+*listenAddr,
+		"port=5002",
+		"!", "rtpbin.recv_rtp_sink_1",
 
 		// audio setup
-		"rtpbin.", "!", "rtpopusdepay", "!", "opusdec", "!", "audioconvert", "!", "audioresample", "!", "alsasink", // to default ALSA sink
+		"rtpbin.",
+		"!", "rtpopusdepay",
+		"!", "opusdec",
+		"!", "audioconvert",
+		"!", "audioresample",
+		// Output to default PulseAudio sink, which will be captured by OBS as
+		// desktop audio. This is a little better than introducing another loop
+		// device hop.
+		"!", "pulsesink",
 
 		// Even more UDP network setup
 		"udpsrc", "port=5003", "!", "rtpbin.recv_rtcp_sink_1",

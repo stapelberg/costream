@@ -13,9 +13,27 @@ import (
 
 func sendToPeer(ctx context.Context) error {
 	var (
-		peer          = flag.String("peer", "10.0.0.66", "TODO")
-		v4l2srcdevice = flag.String("v4l2src_device", "/dev/video10", "V4L2 video device to send to peer")
-		alsasrcdevice = flag.String("alsasrc_device", "hw:10,1", "ALSA audio device to send to peer")
+		peer = flag.String(
+			"peer",
+			"10.0.0.66",
+			"TODO")
+
+		listenAddr = flag.String(
+			"listen",
+			"midna.zekjur.net",
+			"TODO")
+
+		v4l2srcdevice = flag.String(
+			"v4l2src_device",
+			"/dev/video10",
+			"V4L2 video device to send to peer")
+
+		pulsesrcdevice = flag.String(
+			"pulsesrc_device",
+			// cannot open ALSA subdevice ,1 via pulse, so we just use pulseaudio’s monitor
+			// mic: alsa_input.usb-RODE_MICROPHONESj_Rode_Podcaster-00.mono-fallback
+			"alsa_output.platform-snd_aloop.0.analog-stereo.monitor",
+			"PulseAudio source (see pactl list sources) to send to peer")
 	)
 	flag.Parse()
 
@@ -63,28 +81,23 @@ func sendToPeer(ctx context.Context) error {
 		"rtpbin.send_rtcp_src_0",
 		"!", "udpsink", "host="+*peer, "port=5001", "sync=false", "async=false",
 		// Receive RTCP packets for video stream on :5005
-		"udpsrc", "port=5005",
+		"udpsrc", "address="+*listenAddr, "port=5005",
 		"!", "rtpbin.recv_rtcp_sink_0",
 
 		// Audio setup
 		// TODO: for lower latency, could capture the microphone directly,
 		// but have to set up microphone filters on the remote OBS
-		"alsasrc", "device="+*alsasrcdevice, "!",
-		// when using the default (mic directly):
-		// /GstPipeline:pipeline0/GstAlsaSrc:alsasrc0.GstPad:src: caps = audio/x-raw, rate=(int)48000, channels=(int)1, format=(string)S16LE, layout=(string)interleaved
-		// when using hw:10,1:
-		// /GstPipeline:pipeline0/GstAlsaSrc:alsasrc0.GstPad:src: caps = audio/x-raw, rate=(int)44100, format=(string)S16LE, channels=(int)2, layout=(string)interleaved, channel-mask=(bitmask)0x0000000000000003
-
-		"audioconvert", "!",
-		"audioresample", "!",
-		"opusenc", "!",
-		"rtpopuspay", "!",
-		"rtpbin.send_rtp_sink_1",
+		"pulsesrc", "device="+*pulsesrcdevice,
+		"!", "audio/x-raw,rate=44100",
+		"!", "audioresample",
+		"!", "opusenc", "audio-type=voice",
+		"!", "rtpopuspay",
+		"!", "rtpbin.send_rtp_sink_1",
 
 		// Send audio RTP to <peer>:5002
 		"rtpbin.send_rtp_src_1", "!", "udpsink", "host="+*peer, "port=5002",
 		"rtpbin.send_rtcp_src_1", "!", "udpsink", "host="+*peer, "port=5003", "sync=false", "async=false",
-		"udpsrc", "port=5007", "!", "rtpbin.recv_rtcp_sink_1")
+		"udpsrc", "address="+*listenAddr, "port=5007", "!", "rtpbin.recv_rtcp_sink_1")
 	gst.Stdout = os.Stdout
 	gst.Stderr = os.Stderr
 	log.Println(gst.Args)
@@ -92,7 +105,6 @@ func sendToPeer(ctx context.Context) error {
 	if err := gst.Run(); err != nil {
 		return fmt.Errorf("%v: %v", gst.Args, err)
 	}
-
 	return nil
 }
 

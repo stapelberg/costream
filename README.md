@@ -3,18 +3,23 @@ computer with low latency.
 
 Having OBS stream into a custom RTMP server turned out to have too much latency.
 
-TODO: insert mega-diagram.jpg
+![overview](overview.jpg)
 
 TODO: is netclock something we want? https://github.com/NHGmaniac/gst-videowall/blob/master/lib/netclock.py
 
 dumping a dot graph out of gstreamer: https://developer.ridgerun.com/wiki/index.php/How_to_generate_a_Gstreamer_pipeline_diagram_(graph)
 
-TODO: audio has some distortion. could be related to the clock rate difference?
-- issue disappears when using the default input (RODE podcaster) instead of the loop device
-
 ## OBS video setup
 
-TODO: describe how to set up the v4l2sink in OBS
+Make OBS send its video output not just to stream and recording, but also to
+`/dev/video10`:
+
+* Tools
+* → v4l2sink
+* → device path: `/dev/video10`
+* → autostart enabled
+* → click start
+* → close window
 
 ## OBS audio setup
 
@@ -53,29 +58,42 @@ Then, make OBS route your microphone into the monitoring device:
 
 ## Setup
 
+To set up the V4L2 devices `/dev/video10` and `/dev/video11`, as well as the
+ALSA `snd-aloop` loop device, run:
+
 ```shell
 go run setup.go
 ```
 
 TODO: install setup.go such that it will be run as root after boot
 
-## Running
+## Sending/receiving a stream
 
 UDP port 5000 to 5007 need to be open.
 
 stapelberg runs:
 ```
+# Read OBS stream video output and monitored audio output from:
+#   -v4l2src_device=/dev/video10 and
+#   -pulsesrc_device=alsa_output.platform-snd_aloop.0.analog-stereo.monitor
 go run send-to-peer.go   -peer=rtp6.servnerr.com -listen=rtp6.zekjur.net
+
+# Write remote stream video/audio to:
+#   -v4l2sink_device=/dev/video11 and
+#   the default PulseAudio sink (desktop audio)
 go run recv-from-peer.go -peer=rtp6.servnerr.com -listen=rtp6.zekjur.net
 ```
 
-mdlayher runs:
+Conversely, mdlayher runs:
 ```
 go run send-to-peer.go   -peer=rtp6.zekjur.net -listen=rtp6.servnerr.com
 go run recv-from-peer.go -peer=rtp6.zekjur.net -listen=rtp6.servnerr.com
 ```
 
 TODO: currently, the receiver needs to be restarted when the sender is restarted
+- sender stops
+- receiver still prints stats messages, pipeline still playing
+- once sender restarts (!), receiver prints PAUSED, then prints READY, and hangs
 
 TODO: check if the converse is also true
 

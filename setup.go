@@ -36,15 +36,18 @@ func setup() error {
 	}
 
 	must("sudo", "modprobe", "v4l2loopback", "video_nr=10,11", "card_label=v4l2-topeer,v4l2-frompeer", "exclusive_caps=1")
+
+	// TODO: to get rid of the snd-aloop kernel module altogether,
+	// I tried using a PulseAudio null sink, but OBS would not list
+	// it as an option for the audio monitor device.
+
 	// TODO: consider using pcm_substreams=1. will that effectively get rid of
 	// the un-intuitive cross-connection?
-	must("sudo", "modprobe", "snd-aloop", "enable=1,1", "index=10,11", "id=aloop-topeer,aloop-frompeer")
+	// - tried it and it behaved weirdly
+	must("sudo", "modprobe", "snd-aloop", "enable=1", "index=10", "id=aloop-topeer")
 
 	must("pacmd", "update-source-proplist alsa_input.platform-snd_aloop.0.analog-stereo device.description=\"aloop-topeer source\"")
 	must("pacmd", "update-sink-proplist alsa_output.platform-snd_aloop.0.analog-stereo device.description=\"aloop-topeer sink\"")
-
-	must("pacmd", "update-source-proplist alsa_input.platform-snd_aloop.1.analog-stereo device.description=\"aloop-frompeer source\"")
-	must("pacmd", "update-sink-proplist alsa_output.platform-snd_aloop.1.analog-stereo device.description=\"aloop-frompeer sink\"")
 
 	return nil
 }
