@@ -1,13 +1,58 @@
-Conceptually, we want to transport the OBS output (video and audio) to another
-computer with low latency.
+This repository contains the early beginnings of a streaming setup that is
+suitable for co-streaming, pair-programming or whichever way you want to call
+two people collaborating on a piece of software on a live stream.
 
-Having OBS stream into a custom RTMP server turned out to have too much latency.
+Both people have their own twitch channels: https://www.twitch.tv/mdlayher and
+https://www.twitch.tv/stapelberg. So how do we combine them?
+
+Conceptually, we want to transport the OBS output (video and audio) to another
+computer, but with low latency.
+
+Unfortunately, the simplest solution of just using OBS to stream to a custom
+RTMP server turned out to have too much latency.
+
+## First attempt: video call + twitch multistream
+
+In our first attempt ([recording](https://www.youtube.com/watch?v=JW8Cg6JDXSc)),
+we used https://whereby.com/ for a video call with screen sharing, and
+https://multistre.am/ to combine our two twitch channels, with audio only on one
+channel to have it synchronized.
+
+There were some issues with this approach:
+
+1. Viewers of the stream without audio were confused and didn’t see the hint to
+   watch at multistre.am. It would be better to have audio on both streams.
+
+1. The OBS setup was pretty complicated: we needed to run multiple instances.
+
+## Current attempt: gstreamer-based WebRTC
+
+<a href="https://youtu.be/1g46ei9aBH0"><img src="2020-06-27-webrtc.jpg"
+width="400" align="right" alt="thumbnail"></a>
+
+We knew from the first attempt that WebRTC as a technology works well for low
+latency streaming, but WebRTC screen sharing (as implemented in current video
+conference services) had some frustration limitations: many services cap the
+refresh rate at 5 fps max, and most don’t allow for full 1920x1080 resolution.
+
+After several days of research and trial and error, we ended up using gstreamer
+to establish a WebRTC session with multiple streams.
+
+This turned out to work really well ([recording](https://youtu.be/1g46ei9aBH0))!
+
+## Overview
 
 ![overview](overview.jpg)
 
-TODO: is netclock something we want? https://github.com/NHGmaniac/gst-videowall/blob/master/lib/netclock.py
+## Debugging
 
-dumping a dot graph out of gstreamer: https://developer.ridgerun.com/wiki/index.php/How_to_generate_a_Gstreamer_pipeline_diagram_(graph)
+To dump a dot graph out of gstreamer, see https://developer.ridgerun.com/wiki/index.php/How_to_generate_a_Gstreamer_pipeline_diagram_(graph)
+
+## Limitation: one person cannot see the other, only hear
+
+There is plenty to improve about the experience, but in terms of conceptual
+limitations, the big one is that the person who is driving cannot see the other
+person (creating an infinite loop otherwise).
 
 ## OBS video setup
 
@@ -23,13 +68,17 @@ Make OBS send its video output not just to stream and recording, but also to
 
 ## OBS audio setup
 
-First, point OBS’s monitoring feature to the `snd-loop` ALSA device:
+First, point OBS’s monitoring feature to the monitor device of the `snd-loop`
+ALSA device, which we later grab via PulseAudio:
 
 * File
 * → Settings
 * → Audio
 * → Advanced
-* → Monitoring device: select the loopback device (name cannot be changed?)
+* → Monitoring device: “Monitor Of Built-In Analog Stereo”. Unfortunately, our
+  custom device name is not displayed by OBS. However, monitor devices are
+  listed above their corresponding device, so hopefully that helps pick the
+  right entry.
 
 Then, make OBS route your microphone into the monitoring device:
 
@@ -40,13 +89,13 @@ Then, make OBS route your microphone into the monitoring device:
 
 ## Dependencies
 
-### Debian
+### Debian/Ubuntu
 
 | package | version number |
 |---------|----------------|
 | [v4l2loopback-dkms](https://packages.debian.org/bullseye/v4l2loopback-dkms) | 0.12.5-1 |
 | [obs-v4l2sink.deb](https://github.com/CatxFish/obs-v4l2sink/releases/download/0.1.0/obs-v4l2sink.deb) | 0.1.0 |
-| gstreamer1.0-alsa | TODO
+| [gstreamer1.0-alsa](https://packages.ubuntu.com/bionic/gstreamer1.0-alsa) | 1.14.1
 
 ### Arch Linux
 
@@ -54,7 +103,7 @@ Then, make OBS route your microphone into the monitoring device:
 |---------|----------------|
 | [community/v4l2loopback-dkms](https://www.archlinux.org/packages/community/any/v4l2loopback-dkms/) | 0.12.5-1 |
 | [AUR:obs-v4l2sink](https://aur.archlinux.org/packages/obs-v4l2sink/) | 0.1.0 |
-| [extra/gst-plugins-ugly](TODO) | 1.16.2-3
+| [extra/gst-plugins-ugly](https://www.archlinux.org/packages/extra/x86_64/gst-plugins-ugly/) | 1.16.2-3
 
 ## Setup
 
@@ -65,8 +114,6 @@ ALSA `snd-aloop` loop device, run:
 go run setup.go
 ```
 
-TODO: install setup.go such that it will be run as root after boot
-
 ## Sending/receiving a stream
 
 UDP port 5000 to 5007 need to be open.
@@ -76,25 +123,16 @@ stapelberg runs:
 # Read OBS stream video output and monitored audio output from:
 #   -v4l2src_device=/dev/video10 and
 #   -pulsesrc_device=alsa_output.platform-snd_aloop.0.analog-stereo.monitor
-go run send-to-peer.go   -peer=rtp6.servnerr.com -listen=rtp6.zekjur.net
+go run send-to-peer.go   -peer=rtp6.mdlayher.net.example -listen=rtp6.stapelberg.net.example
 
 # Write remote stream video/audio to:
 #   -v4l2sink_device=/dev/video11 and
 #   the default PulseAudio sink (desktop audio)
-go run recv-from-peer.go -peer=rtp6.servnerr.com -listen=rtp6.zekjur.net
+go run recv-from-peer.go -peer=rtp6.mdlayher.net.example -listen=rtp6.stapelberg.net.example
 ```
 
 Conversely, mdlayher runs:
 ```
-go run send-to-peer.go   -peer=rtp6.zekjur.net -listen=rtp6.servnerr.com
-go run recv-from-peer.go -peer=rtp6.zekjur.net -listen=rtp6.servnerr.com
+go run send-to-peer.go   -peer=rtp6.stapelberg.net.example -listen=rtp6.mdlayher.net.example
+go run recv-from-peer.go -peer=rtp6.stapelberg.net.example -listen=rtp6.mdlayher.net.example
 ```
-
-TODO: currently, the receiver needs to be restarted when the sender is restarted
-- sender stops
-- receiver still prints stats messages, pipeline still playing
-- once sender restarts (!), receiver prints PAUSED, then prints READY, and hangs
-
-TODO: check if the converse is also true
-
-TODO: make it so that no restarts are necessary either way
