@@ -32,7 +32,7 @@ width="400" align="right" alt="thumbnail"></a>
 
 We knew from the first attempt that WebRTC as a technology works well for low
 latency streaming, but WebRTC screen sharing (as implemented in current video
-conference services) had some frustration limitations: many services cap the
+conference services) had some frustrating limitations: many services cap the
 refresh rate at 5 fps max, and most don’t allow for full 1920x1080 resolution.
 
 After several days of research and trial and error, we ended up using gstreamer
