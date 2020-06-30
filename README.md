@@ -25,7 +25,7 @@ There were some issues with this approach:
 
 1. The OBS setup was pretty complicated: we needed to run multiple instances.
 
-## Current attempt: gstreamer-based WebRTC
+## Current attempt: gstreamer-based RTP
 
 <a href="https://youtu.be/1g46ei9aBH0"><img src="2020-06-27-webrtc.jpg"
 width="400" align="right" alt="thumbnail"></a>
@@ -36,7 +36,7 @@ conference services) had some frustration limitations: many services cap the
 refresh rate at 5 fps max, and most don’t allow for full 1920x1080 resolution.
 
 After several days of research and trial and error, we ended up using gstreamer
-to establish a WebRTC session with multiple streams.
+to establish an RTP session with multiple streams, just like WebRTC does.
 
 This turned out to work really well ([recording](https://youtu.be/1g46ei9aBH0))!
 
